@@ -31,16 +31,19 @@ func NewServer(listenAddr string) *Server {
 var authenticatedKeys = []string{"1285fa9360f4b4ef4d123e7764597e8f5a0370943713302a3abed5d7e9d6da4e"}
 
 func (s *Server) Start() error {
+	// Start listening the port
 	ln, err := net.Listen("tcp", s.listenAddr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
+	// Set listener
 	s.ln = ln
-
+	// Call goroutine to make connections with clients
 	go s.acceptLoop()
 
 	<-s.quitch
+	// Close the previous message channel to avoid broken pipe and inproper messages
 	close(s.msgch)
 
 	return nil
@@ -68,20 +71,20 @@ func (s *Server) readLoop(conn net.Conn) {
 		if err != nil {
 			continue
 		}
-
+		// Assign the read data over the channel
 		message := buf[:n]
 		s.msgch <- Message{
 			from:    conn.RemoteAddr().String(),
 			payload: message,
 		}
-
+		// Authenticate the recieved key
 		isAuthenticated := AuthenticateKey(string(message), authenticatedKeys)
-
+		// Set the result => 44 is not verified, 33 is verified
 		response := "44"
 		if isAuthenticated {
 			response = "33"
 		}
-
+		// Send the server response to the client
 		_, err = conn.Write([]byte(response))
 		if err != nil {
 			fmt.Println("ERROR : ", err)
@@ -90,8 +93,9 @@ func (s *Server) readLoop(conn net.Conn) {
 }
 
 func main() {
+	// Initialize new server
 	server := NewServer(":8080")
-
+	// A goroutine to print the recieved messages
 	go func() {
 		for msg := range server.msgch {
 			fmt.Printf("recieved message from connection (%s): %s\n", msg.from, string(msg.payload))
@@ -100,6 +104,7 @@ func main() {
 	log.Fatal(server.Start())
 }
 
+// Hash the recieved key
 func HashInput(input string) string {
 	hash := sha256.New()
 	hash.Write([]byte(input))
@@ -112,8 +117,9 @@ func VerifyHash(input, knownHash string) bool {
 	return computedHash == knownHash
 }
 
+// Authenticate the recieved key
 func AuthenticateKey(recievedKey string, keys []string) bool {
-	// verify the hashed key
+	// Verify the hashed key
 	isMatched := false
 	for _, key := range keys {
 		isMatched = VerifyHash(recievedKey, key)
